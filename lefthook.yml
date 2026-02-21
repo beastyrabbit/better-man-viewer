@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    gitleaks:
+      run: |
+        if ! command -v gitleaks >/dev/null 2>&1; then
+          echo "gitleaks is required for commits. Install from https://github.com/gitleaks/gitleaks"
+          exit 1
+        fi
+        gitleaks protect --staged --redact --verbose
+    lint:
+      run: pnpm lint
