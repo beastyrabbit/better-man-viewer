@@ -3,7 +3,9 @@ import type { ManDocumentPayload } from "./types";
 const baseSections = [
   {
     heading: "NAME",
-    lines: (topic: string) => [`${topic} - mock man page fallback for browser mode`],
+    lines: (topic: string) => [
+      `${topic} - mock man page fallback for browser mode`,
+    ],
   },
   {
     heading: "SYNOPSIS",
@@ -70,7 +72,14 @@ const baseSections = [
   },
   {
     heading: "SEE ALSO",
-    lines: () => ["man(1)", "col(1)", "less(1)", "groff(7)", "apropos(1)", "whatis(1)"],
+    lines: () => [
+      "man(1)",
+      "col(1)",
+      "less(1)",
+      "groff(7)",
+      "apropos(1)",
+      "whatis(1)",
+    ],
   },
 ];
 
@@ -109,8 +118,12 @@ export function createMockManpage(query: string): ManDocumentPayload {
   } else {
     lines.push("NOTES");
     lines.push("");
-    lines.push("This mock document intentionally contains many repeated lines.");
-    lines.push("It helps validate minimap rendering and virtualized scrolling behavior.");
+    lines.push(
+      "This mock document intentionally contains many repeated lines.",
+    );
+    lines.push(
+      "It helps validate minimap rendering and virtualized scrolling behavior.",
+    );
   }
 
   return {

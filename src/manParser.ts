@@ -1,4 +1,10 @@
-import type { FilterLine, FindMatch, SectionAnchor, TokenKind, TokenSegment } from "./types";
+import type {
+  FilterLine,
+  FindMatch,
+  SectionAnchor,
+  TokenKind,
+  TokenSegment,
+} from "./types";
 
 const KNOWN_SECTION_HEADINGS = new Set([
   "NAME",
@@ -19,7 +25,8 @@ const KNOWN_SECTION_HEADINGS = new Set([
   "COPYRIGHT",
 ]);
 
-const TOKEN_PATTERN = /(--?[a-zA-Z0-9][\w-]*|\b[A-Z][A-Z0-9_]{2,}\b|(?:~|\/)[\w./-]+|`[^`]+`|\b[a-z]{2,}\(\d\)\b)/g;
+const TOKEN_PATTERN =
+  /(--?[a-zA-Z0-9][\w-]*|\b[A-Z][A-Z0-9_]{2,}\b|(?:~|\/)[\w./-]+|`[^`]+`|\b[a-z]{2,}\(\d\)\b)/g;
 
 export function splitLines(rawText: string): string[] {
   if (!rawText) {
@@ -127,7 +134,11 @@ function classifyToken(token: string): TokenKind {
 
 export function tokenizeLine(line: string): TokenSegment[] {
   const trimmed = line.trim();
-  if (trimmed !== "" && trimmed.length <= 72 && trimmed === trimmed.toUpperCase()) {
+  if (
+    trimmed !== "" &&
+    trimmed.length <= 72 &&
+    trimmed === trimmed.toUpperCase()
+  ) {
     return [{ text: line, kind: "heading" }];
   }
 
@@ -157,7 +168,11 @@ function normalizeForSearch(value: string, caseSensitive: boolean): string {
   return caseSensitive ? value : value.toLowerCase();
 }
 
-export function findMatches(lines: string[], query: string, caseSensitive = false): FindMatch[] {
+export function findMatches(
+  lines: string[],
+  query: string,
+  caseSensitive = false,
+): FindMatch[] {
   const needleRaw = query.trim();
   if (!needleRaw) {
     return [];
@@ -194,7 +209,10 @@ export function findMatches(lines: string[], query: string, caseSensitive = fals
   return matches;
 }
 
-export function buildFilterLines(lines: string[], matches: FindMatch[]): FilterLine[] {
+export function buildFilterLines(
+  lines: string[],
+  matches: FindMatch[],
+): FilterLine[] {
   const counts = new Map<number, number>();
 
   matches.forEach((match) => {

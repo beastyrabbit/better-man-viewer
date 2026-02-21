@@ -6,7 +6,12 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --bg-gradient: radial-gradient(circle at 12% 14%, #193048 0%, #101723 48%, #0a1018 100%);
+  --bg-gradient: radial-gradient(
+    circle at 12% 14%,
+    #193048 0%,
+    #101723 48%,
+    #0a1018 100%
+  );
   --panel: rgba(14, 24, 36, 0.84);
   --panel-strong: rgba(14, 26, 42, 0.93);
   --panel-muted: rgba(15, 24, 37, 0.72);
@@ -27,7 +32,12 @@
 html[data-theme="light"] {
   color-scheme: light;
 
-  --bg-gradient: radial-gradient(circle at 14% 12%, #e1eefb 0%, #d8e4f2 44%, #c7d4e8 100%);
+  --bg-gradient: radial-gradient(
+    circle at 14% 12%,
+    #e1eefb 0%,
+    #d8e4f2 44%,
+    #c7d4e8 100%
+  );
   --panel: rgba(243, 248, 255, 0.9);
   --panel-strong: rgba(247, 251, 255, 0.96);
   --panel-muted: rgba(238, 244, 252, 0.86);
@@ -67,7 +77,10 @@ button {
   background: var(--panel-muted);
   color: var(--text-main);
   cursor: pointer;
-  transition: background-color 130ms ease, border-color 130ms ease, transform 130ms ease;
+  transition:
+    background-color 130ms ease,
+    border-color 130ms ease,
+    transform 130ms ease;
 }
 
 button:hover {
@@ -345,7 +358,11 @@ input:focus {
   overflow-y: auto;
   font-family: "IBM Plex Mono", "JetBrains Mono", "Fira Code", monospace;
   font-size: 0.96rem;
-  background: linear-gradient(145deg, rgba(16, 26, 37, 0.15), rgba(24, 34, 46, 0.06));
+  background: linear-gradient(
+    145deg,
+    rgba(16, 26, 37, 0.15),
+    rgba(24, 34, 46, 0.06)
+  );
 }
 
 .doc-scroll.hide-scrollbar {
@@ -484,6 +501,18 @@ mark {
   margin: 0;
   color: var(--text-subtle);
   font-size: 0.86rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (max-width: 1200px) {

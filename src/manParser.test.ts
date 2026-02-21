@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildFilterLines, findMatches, parseSections, splitLines, tokenizeLine } from "./manParser";
+import {
+  buildFilterLines,
+  findMatches,
+  parseSections,
+  splitLines,
+  tokenizeLine,
+} from "./manParser";
 
 const SAMPLE = `LS(1)\n\nNAME\n\nls - list directory contents\n\nSYNOPSIS\n\nls [OPTION]... [FILE]...\n\nOPTIONS\n\n-a, --all show hidden files\nPATH and MANPAGER may affect output\n`;
 

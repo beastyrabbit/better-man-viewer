@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   getSettings,
   isTauriRuntime,
@@ -6,12 +14,18 @@ import {
   setSettings as persistSettings,
   suggestAlias,
 } from "./backend";
-import { buildFilterLines, findMatches, parseSections, splitLines, tokenizeLine } from "./manParser";
+import {
+  buildFilterLines,
+  findMatches,
+  parseSections,
+  splitLines,
+  tokenizeLine,
+} from "./manParser";
 import {
   DEFAULT_SETTINGS,
   MAX_FONT_SCALE,
-  MIN_FONT_SCALE,
   type ManDocumentPayload,
+  MIN_FONT_SCALE,
   type SearchMode,
   type ViewerSettings,
 } from "./types";
@@ -24,7 +38,11 @@ function clampFontScale(value: number): number {
   return Math.max(MIN_FONT_SCALE, Math.min(MAX_FONT_SCALE, value));
 }
 
-function highlightText(text: string, query: string, keyPrefix: string): ReactNode[] {
+function highlightText(
+  text: string,
+  query: string,
+  keyPrefix: string,
+): ReactNode[] {
   const term = query.trim();
   if (!term) {
     return [text];
@@ -40,17 +58,29 @@ function highlightText(text: string, query: string, keyPrefix: string): ReactNod
   while (cursor < text.length) {
     const matchIndex = lowerText.indexOf(lowerTerm, cursor);
     if (matchIndex === -1) {
-      result.push(<span key={`${keyPrefix}-tail-${partIndex}`}>{text.slice(cursor)}</span>);
+      result.push(
+        <span key={`${keyPrefix}-tail-${partIndex}`}>
+          {text.slice(cursor)}
+        </span>,
+      );
       break;
     }
 
     if (matchIndex > cursor) {
-      result.push(<span key={`${keyPrefix}-plain-${partIndex}`}>{text.slice(cursor, matchIndex)}</span>);
+      result.push(
+        <span key={`${keyPrefix}-plain-${partIndex}`}>
+          {text.slice(cursor, matchIndex)}
+        </span>,
+      );
       partIndex += 1;
     }
 
     const matchEnd = matchIndex + term.length;
-    result.push(<mark key={`${keyPrefix}-mark-${partIndex}`}>{text.slice(matchIndex, matchEnd)}</mark>);
+    result.push(
+      <mark key={`${keyPrefix}-mark-${partIndex}`}>
+        {text.slice(matchIndex, matchEnd)}
+      </mark>,
+    );
     partIndex += 1;
     cursor = matchEnd;
   }
@@ -58,7 +88,10 @@ function highlightText(text: string, query: string, keyPrefix: string): ReactNod
   return result;
 }
 
-function mergeSettings(current: ViewerSettings, update: Partial<ViewerSettings>): ViewerSettings {
+function mergeSettings(
+  current: ViewerSettings,
+  update: Partial<ViewerSettings>,
+): ViewerSettings {
   return {
     ...current,
     ...update,
@@ -72,10 +105,14 @@ function mergeSettings(current: ViewerSettings, update: Partial<ViewerSettings>)
 function App() {
   const [settings, setSettings] = useState<ViewerSettings>(DEFAULT_SETTINGS);
   const [topicInput, setTopicInput] = useState("ls");
-  const [documentData, setDocumentData] = useState<ManDocumentPayload | null>(null);
+  const [documentData, setDocumentData] = useState<ManDocumentPayload | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [searchMode, setSearchMode] = useState<SearchMode>(DEFAULT_SETTINGS.lastSearchMode);
+  const [searchMode, setSearchMode] = useState<SearchMode>(
+    DEFAULT_SETTINGS.lastSearchMode,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [activeFilterIndex, setActiveFilterIndex] = useState(0);
@@ -89,11 +126,20 @@ function App() {
   const pendingAnchorRef = useRef<number | null>(null);
   const settingsInitializedRef = useRef(false);
 
-  const lines = useMemo(() => splitLines(documentData?.rawText ?? ""), [documentData]);
+  const lines = useMemo(
+    () => splitLines(documentData?.rawText ?? ""),
+    [documentData],
+  );
   const sections = useMemo(() => parseSections(lines), [lines]);
 
-  const allMatches = useMemo(() => findMatches(lines, searchQuery), [lines, searchQuery]);
-  const filterLines = useMemo(() => buildFilterLines(lines, allMatches), [lines, allMatches]);
+  const allMatches = useMemo(
+    () => findMatches(lines, searchQuery),
+    [lines, searchQuery],
+  );
+  const filterLines = useMemo(
+    () => buildFilterLines(lines, allMatches),
+    [lines, allMatches],
+  );
 
   const firstMatchIndexByLine = useMemo(() => {
     const map = new Map<number, number>();
@@ -108,10 +154,19 @@ function App() {
   const lineHeight = Math.round(BASE_LINE_HEIGHT * settings.fontScale);
   const totalHeight = lines.length * lineHeight;
 
-  const startLine = Math.max(0, Math.floor(scrollTop / lineHeight) - OVERSCAN_LINES);
-  const endLine = Math.min(lines.length, Math.ceil((scrollTop + viewportHeight) / lineHeight) + OVERSCAN_LINES);
+  const startLine = Math.max(
+    0,
+    Math.floor(scrollTop / lineHeight) - OVERSCAN_LINES,
+  );
+  const endLine = Math.min(
+    lines.length,
+    Math.ceil((scrollTop + viewportHeight) / lineHeight) + OVERSCAN_LINES,
+  );
 
-  const activeMatch = allMatches[Math.min(activeMatchIndex, Math.max(allMatches.length - 1, 0))] ?? null;
+  const activeMatch =
+    allMatches[
+      Math.min(activeMatchIndex, Math.max(allMatches.length - 1, 0))
+    ] ?? null;
 
   const viewportLines = viewportHeight > 0 ? viewportHeight / lineHeight : 0;
   const longDocument = lines.length > Math.max(60, viewportLines * 1.5);
@@ -135,34 +190,34 @@ function App() {
     [lineHeight, totalHeight],
   );
 
-  const loadTopic = useCallback(
-    async (query: string) => {
-      const trimmed = query.trim();
-      if (!trimmed) {
-        setErrorMessage("Enter a command or topic (for example: ls, printf, or 2 open).");
-        return;
-      }
+  const loadTopic = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setErrorMessage(
+        "Enter a command or topic (for example: ls, printf, or 2 open).",
+      );
+      return;
+    }
 
-      setLoading(true);
-      setErrorMessage(null);
+    setLoading(true);
+    setErrorMessage(null);
 
-      try {
-        const payload = await loadManPage(trimmed);
-        setDocumentData(payload);
-        setTopicInput(payload.query);
-        setSearchQuery("");
-        setActiveMatchIndex(0);
-        setActiveFilterIndex(0);
-        pendingAnchorRef.current = 0;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to load man page.";
-        setErrorMessage(message);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+    try {
+      const payload = await loadManPage(trimmed);
+      setDocumentData(payload);
+      setTopicInput(payload.query);
+      setSearchQuery("");
+      setActiveMatchIndex(0);
+      setActiveFilterIndex(0);
+      pendingAnchorRef.current = 0;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to load man page.";
+      setErrorMessage(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -260,11 +315,6 @@ function App() {
   }, [activeMatch, scrollToLine, searchMode, searchQuery]);
 
   useEffect(() => {
-    setActiveMatchIndex(0);
-    setActiveFilterIndex(0);
-  }, [searchMode, searchQuery]);
-
-  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const accelPressed = event.ctrlKey || event.metaKey;
       if (!accelPressed) {
@@ -273,12 +323,20 @@ function App() {
 
       if (event.key === "+" || event.key === "=") {
         event.preventDefault();
-        setSettings((current) => mergeSettings(current, { fontScale: clampFontScale(current.fontScale + 0.1) }));
+        setSettings((current) =>
+          mergeSettings(current, {
+            fontScale: clampFontScale(current.fontScale + 0.1),
+          }),
+        );
       }
 
       if (event.key === "-") {
         event.preventDefault();
-        setSettings((current) => mergeSettings(current, { fontScale: clampFontScale(current.fontScale - 0.1) }));
+        setSettings((current) =>
+          mergeSettings(current, {
+            fontScale: clampFontScale(current.fontScale - 0.1),
+          }),
+        );
       }
 
       if (event.key === "0") {
@@ -293,8 +351,14 @@ function App() {
     };
   }, []);
 
-  const headingLines = useMemo(() => new Set(sections.map((section) => section.startLine)), [sections]);
-  const matchLines = useMemo(() => new Set(filterLines.map((entry) => entry.lineIndex)), [filterLines]);
+  const headingLines = useMemo(
+    () => new Set(sections.map((section) => section.startLine)),
+    [sections],
+  );
+  const matchLines = useMemo(
+    () => new Set(filterLines.map((entry) => entry.lineIndex)),
+    [filterLines],
+  );
 
   useEffect(() => {
     if (!minimapEnabled) {
@@ -336,32 +400,49 @@ function App() {
       const blockHeight = Math.max(1, (step / lines.length) * height);
 
       if (headingLines.has(index)) {
-        context.fillStyle = settings.theme === "dark" ? "rgba(138, 184, 255, 0.85)" : "rgba(42, 88, 160, 0.72)";
+        context.fillStyle =
+          settings.theme === "dark"
+            ? "rgba(138, 184, 255, 0.85)"
+            : "rgba(42, 88, 160, 0.72)";
       } else if (matchLines.has(index)) {
-        context.fillStyle = settings.theme === "dark" ? "rgba(255, 205, 80, 0.65)" : "rgba(182, 126, 20, 0.65)";
+        context.fillStyle =
+          settings.theme === "dark"
+            ? "rgba(255, 205, 80, 0.65)"
+            : "rgba(182, 126, 20, 0.65)";
       } else {
         const line = lines[index];
         const density = Math.min(1, line.trim().length / 66);
         const opacity = 0.08 + density * 0.2;
-        context.fillStyle = settings.theme === "dark" ? `rgba(170, 194, 220, ${opacity})` : `rgba(74, 92, 118, ${opacity})`;
+        context.fillStyle =
+          settings.theme === "dark"
+            ? `rgba(170, 194, 220, ${opacity})`
+            : `rgba(74, 92, 118, ${opacity})`;
       }
 
       context.fillRect(0, y, width, blockHeight);
     }
 
     const viewportTop = (scrollTop / Math.max(totalHeight, 1)) * height;
-    const viewportBlockHeight = Math.max(20, (viewportHeight / Math.max(totalHeight, 1)) * height);
+    const viewportBlockHeight = Math.max(
+      20,
+      (viewportHeight / Math.max(totalHeight, 1)) * height,
+    );
 
-    context.fillStyle = settings.theme === "dark" ? "rgba(79, 130, 218, 0.2)" : "rgba(45, 87, 170, 0.24)";
+    context.fillStyle =
+      settings.theme === "dark"
+        ? "rgba(79, 130, 218, 0.2)"
+        : "rgba(45, 87, 170, 0.24)";
     context.fillRect(1, viewportTop, width - 2, viewportBlockHeight);
 
-    context.strokeStyle = settings.theme === "dark" ? "rgba(119, 173, 255, 0.9)" : "rgba(29, 69, 135, 0.9)";
+    context.strokeStyle =
+      settings.theme === "dark"
+        ? "rgba(119, 173, 255, 0.9)"
+        : "rgba(29, 69, 135, 0.9)";
     context.lineWidth = 1.5;
     context.strokeRect(1, viewportTop, width - 2, viewportBlockHeight);
   }, [
     headingLines,
     lines,
-    longDocument,
     matchLines,
     minimapEnabled,
     scrollTop,
@@ -379,7 +460,10 @@ function App() {
       }
 
       const bounds = canvas.getBoundingClientRect();
-      const relativeY = Math.max(0, Math.min(clientY - bounds.top, bounds.height));
+      const relativeY = Math.max(
+        0,
+        Math.min(clientY - bounds.top, bounds.height),
+      );
       const ratio = relativeY / Math.max(bounds.height, 1);
 
       const nextScrollTop = ratio * totalHeight - viewport.clientHeight / 2;
@@ -417,10 +501,16 @@ function App() {
   };
 
   const changeSearchMode = (mode: SearchMode) => {
-    if (searchMode === "filter" && mode !== "filter" && filterLines[activeFilterIndex]) {
+    if (
+      searchMode === "filter" &&
+      mode !== "filter" &&
+      filterLines[activeFilterIndex]
+    ) {
       pendingAnchorRef.current = filterLines[activeFilterIndex].lineIndex;
     }
 
+    setActiveMatchIndex(0);
+    setActiveFilterIndex(0);
     setSearchMode(mode);
     setSettings((current) => mergeSettings(current, { lastSearchMode: mode }));
   };
@@ -431,7 +521,8 @@ function App() {
     }
 
     setActiveMatchIndex((current) => {
-      const next = (current + direction + allMatches.length) % allMatches.length;
+      const next =
+        (current + direction + allMatches.length) % allMatches.length;
       return next;
     });
   };
@@ -456,9 +547,19 @@ function App() {
   for (let index = startLine; index < endLine; index += 1) {
     const sourceLine = lines[index] ?? "";
     const tokens = tokenizeLine(sourceLine);
+    let tokenOffset = 0;
+    const tokenSpans = tokens.map((token) => {
+      const currentOffset = tokenOffset;
+      tokenOffset += token.text.length;
+      return { token, offset: currentOffset };
+    });
     const lineClasses = ["doc-line"];
 
-    if (activeMatchLine === index && searchMode === "find" && searchQuery.trim() !== "") {
+    if (
+      activeMatchLine === index &&
+      searchMode === "find" &&
+      searchQuery.trim() !== ""
+    ) {
       lineClasses.push("doc-line-active");
     }
 
@@ -474,9 +575,16 @@ function App() {
       >
         <span className="line-number">{index + 1}</span>
         <span className="line-text">
-          {tokens.map((token, tokenIndex) => (
-            <span key={`line-${index}-token-${tokenIndex}`} className={`token token-${token.kind}`}>
-              {highlightText(token.text, searchMode === "find" ? searchQuery : "", `${index}-${tokenIndex}`)}
+          {tokenSpans.map(({ token, offset }) => (
+            <span
+              key={`line-${index}-token-${offset}-${token.kind}-${token.text.length}`}
+              className={`token token-${token.kind}`}
+            >
+              {highlightText(
+                token.text,
+                searchMode === "find" ? searchQuery : "",
+                `${index}-${offset}`,
+              )}
             </span>
           ))}
         </span>
@@ -510,7 +618,8 @@ function App() {
         </form>
 
         <div className="toolbar">
-          <div className="segmented" role="group" aria-label="Search mode">
+          <fieldset className="segmented">
+            <legend className="sr-only">Search mode</legend>
             <button
               type="button"
               className={searchMode === "find" ? "active" : ""}
@@ -525,22 +634,42 @@ function App() {
             >
               Filter
             </button>
-          </div>
+          </fieldset>
 
           <div className="search-controls">
             <input
               aria-label="Search"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              placeholder={searchMode === "find" ? "Find text..." : "Filter matching lines..."}
+              onChange={(event) => {
+                setActiveMatchIndex(0);
+                setActiveFilterIndex(0);
+                setSearchQuery(event.currentTarget.value);
+              }}
+              placeholder={
+                searchMode === "find"
+                  ? "Find text..."
+                  : "Filter matching lines..."
+              }
             />
-            <button type="button" onClick={() => goToMatch(-1)} disabled={allMatches.length === 0}>
+            <button
+              type="button"
+              onClick={() => goToMatch(-1)}
+              disabled={allMatches.length === 0}
+            >
               Prev
             </button>
-            <button type="button" onClick={() => goToMatch(1)} disabled={allMatches.length === 0}>
+            <button
+              type="button"
+              onClick={() => goToMatch(1)}
+              disabled={allMatches.length === 0}
+            >
               Next
             </button>
-            <button type="button" onClick={clearSearch} disabled={searchQuery.length === 0}>
+            <button
+              type="button"
+              onClick={clearSearch}
+              disabled={searchQuery.length === 0}
+            >
               Clear
             </button>
             <span className="match-counter">
@@ -554,19 +683,34 @@ function App() {
             <button
               type="button"
               onClick={() =>
-                setSettings((current) => mergeSettings(current, { fontScale: clampFontScale(current.fontScale - 0.1) }))
+                setSettings((current) =>
+                  mergeSettings(current, {
+                    fontScale: clampFontScale(current.fontScale - 0.1),
+                  }),
+                )
               }
               aria-label="Zoom out"
             >
               A-
             </button>
-            <button type="button" onClick={() => setSettings((current) => mergeSettings(current, { fontScale: 1 }))}>
+            <button
+              type="button"
+              onClick={() =>
+                setSettings((current) =>
+                  mergeSettings(current, { fontScale: 1 }),
+                )
+              }
+            >
               Reset
             </button>
             <button
               type="button"
               onClick={() =>
-                setSettings((current) => mergeSettings(current, { fontScale: clampFontScale(current.fontScale + 0.1) }))
+                setSettings((current) =>
+                  mergeSettings(current, {
+                    fontScale: clampFontScale(current.fontScale + 0.1),
+                  }),
+                )
               }
               aria-label="Zoom in"
             >
@@ -602,7 +746,9 @@ function App() {
             <button
               type="button"
               onClick={() => {
-                void suggestAlias("zsh").then((snippet) => setAliasSnippet(snippet));
+                void suggestAlias("zsh").then((snippet) =>
+                  setAliasSnippet(snippet),
+                );
               }}
             >
               Alias
@@ -624,13 +770,17 @@ function App() {
         </section>
       ) : null}
 
-      {errorMessage ? <section className="error-banner">{errorMessage}</section> : null}
+      {errorMessage ? (
+        <section className="error-banner">{errorMessage}</section>
+      ) : null}
 
       <section className="workspace">
         <aside className="left-pane">
           <div className="panel-section">
             <h2>Sections</h2>
-            {sections.length === 0 ? <p className="muted">No sections detected.</p> : null}
+            {sections.length === 0 ? (
+              <p className="muted">No sections detected.</p>
+            ) : null}
             <ul>
               {sections.map((section) => (
                 <li key={section.id}>
@@ -649,8 +799,12 @@ function App() {
 
           <div className="panel-section">
             <h2>Matches</h2>
-            {searchQuery.trim() === "" ? <p className="muted">Type in search to build quick jumps.</p> : null}
-            {searchQuery.trim() !== "" && filterLines.length === 0 ? <p className="muted">No matching lines.</p> : null}
+            {searchQuery.trim() === "" ? (
+              <p className="muted">Type in search to build quick jumps.</p>
+            ) : null}
+            {searchQuery.trim() !== "" && filterLines.length === 0 ? (
+              <p className="muted">No matching lines.</p>
+            ) : null}
 
             <ul>
               {filterLines.slice(0, 300).map((entry) => (
@@ -659,14 +813,17 @@ function App() {
                     type="button"
                     onClick={() => {
                       if (searchMode === "find") {
-                        const matchIndex = firstMatchIndexByLine.get(entry.lineIndex) ?? 0;
+                        const matchIndex =
+                          firstMatchIndexByLine.get(entry.lineIndex) ?? 0;
                         setActiveMatchIndex(matchIndex);
                       }
                       scrollToLine(entry.lineIndex, "center");
                     }}
                   >
                     <span className="line-pill">L{entry.lineIndex + 1}</span>
-                    <span className="line-snippet">{entry.text.trim() || "(blank line)"}</span>
+                    <span className="line-snippet">
+                      {entry.text.trim() || "(blank line)"}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -676,7 +833,11 @@ function App() {
 
         <div className="center-pane">
           {searchMode === "filter" && searchQuery.trim() !== "" ? (
-            <div className="filter-pane" role="listbox" aria-label="Filtered lines">
+            <div
+              className="filter-pane"
+              role="listbox"
+              aria-label="Filtered lines"
+            >
               {renderedFilterLines.length === 0 ? (
                 <p className="muted">No lines match this filter.</p>
               ) : (
@@ -686,12 +847,18 @@ function App() {
                     <button
                       type="button"
                       key={`filter-${entry.lineIndex}`}
-                      className={selected ? "filter-line selected" : "filter-line"}
+                      className={
+                        selected ? "filter-line selected" : "filter-line"
+                      }
                       onClick={() => selectFilterLine(entry.lineIndex, index)}
                     >
                       <span className="line-pill">L{entry.lineIndex + 1}</span>
                       <span className="line-snippet">
-                        {highlightText(entry.text || "(blank line)", searchQuery, `filter-${index}`)}
+                        {highlightText(
+                          entry.text || "(blank line)",
+                          searchQuery,
+                          `filter-${index}`,
+                        )}
                       </span>
                       <span className="line-pill">{entry.matchCount}x</span>
                     </button>
@@ -702,7 +869,9 @@ function App() {
           ) : (
             <div
               ref={viewportRef}
-              className={minimapEnabled ? "doc-scroll hide-scrollbar" : "doc-scroll"}
+              className={
+                minimapEnabled ? "doc-scroll hide-scrollbar" : "doc-scroll"
+              }
               onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
             >
               <div className="doc-inner" style={{ height: `${totalHeight}px` }}>
