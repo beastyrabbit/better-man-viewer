@@ -1,5 +1,7 @@
+import { ChevronDown, ChevronRight, Moon, Sun } from "lucide-react";
 import {
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -7,6 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import {
   getSettings,
   isTauriRuntime,
@@ -29,13 +37,91 @@ import {
   type SearchMode,
   type ViewerSettings,
 } from "./types";
-import "./App.css";
 
-const BASE_LINE_HEIGHT = 22;
-const OVERSCAN_LINES = 10;
+const BASE_FONT_SIZE_REM = 0.96;
+const LOW_VALUE_SECTION_TITLES = new Set([
+  "AUTHOR",
+  "AUTHORS",
+  "COPYRIGHT",
+  "LICENSE",
+  "LICENSES",
+  "SEE ALSO",
+  "COLOPHON",
+]);
+
+const DOCUMENT_FONT_FAMILY =
+  '"Cascadia Mono", "Consolas", "Lucida Console", monospace';
+
+const TOKEN_KIND_CLASS: Record<string, string> = {
+  heading: "font-semibold text-foreground",
+  option: "text-sky-600 dark:text-sky-400",
+  env: "text-amber-700 dark:text-amber-300",
+  path: "text-blue-700 dark:text-blue-300",
+  literal: "text-violet-700 dark:text-violet-300",
+  command: "text-emerald-700 dark:text-emerald-300",
+  plain: "text-foreground",
+};
+
+const TAB_WIDTH = 8;
+const MAX_WRAP_INDENT_COLUMNS = 40;
 
 function clampFontScale(value: number): number {
   return Math.max(MIN_FONT_SCALE, Math.min(MAX_FONT_SCALE, value));
+}
+
+function areSetsEqual(left: Set<string>, right: Set<string>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  return [...left].every((value) => right.has(value));
+}
+
+function normalizeSectionTitle(title: string): string {
+  return title.trim().toUpperCase();
+}
+
+function countColumns(value: string): number {
+  return [...value].reduce(
+    (total, character) => total + (character === "\t" ? TAB_WIDTH : 1),
+    0,
+  );
+}
+
+function findHangingWrapStartColumns(line: string): number | null {
+  const trimmed = line.trimStart();
+  if (!/^[-+]/.test(trimmed)) {
+    return null;
+  }
+
+  const separatorMatch = /\S([ \t]{2,})\S/.exec(line);
+  if (!separatorMatch || separatorMatch.index === undefined) {
+    return null;
+  }
+
+  const nextTokenCharIndex =
+    separatorMatch.index + 1 + separatorMatch[1].length;
+  return countColumns(line.slice(0, nextTokenCharIndex));
+}
+
+function splitLineIndent(line: string): {
+  content: string;
+  lineStartColumns: number;
+  wrapStartColumns: number;
+} {
+  const leadingWhitespace = line.match(/^[\t ]+/)?.[0] ?? "";
+  const lineStartColumns = countColumns(leadingWhitespace);
+  const hangingWrapStart = findHangingWrapStartColumns(line);
+  const wrapStartColumns = Math.min(
+    Math.max(hangingWrapStart ?? lineStartColumns, lineStartColumns),
+    MAX_WRAP_INDENT_COLUMNS,
+  );
+
+  return {
+    content: line.slice(leadingWhitespace.length),
+    lineStartColumns,
+    wrapStartColumns,
+  };
 }
 
 function highlightText(
@@ -77,7 +163,10 @@ function highlightText(
 
     const matchEnd = matchIndex + term.length;
     result.push(
-      <mark key={`${keyPrefix}-mark-${partIndex}`}>
+      <mark
+        key={`${keyPrefix}-mark-${partIndex}`}
+        className="rounded-sm bg-amber-300/65 px-0 text-inherit dark:bg-amber-400/35"
+      >
         {text.slice(matchIndex, matchEnd)}
       </mark>,
     );
@@ -116,15 +205,16 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [activeFilterIndex, setActiveFilterIndex] = useState(0);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(0);
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [aliasSnippet, setAliasSnippet] = useState<string | null>(null);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const minimapRef = useRef<HTMLCanvasElement | null>(null);
-  const minimapDraggingRef = useRef(false);
+  const lineRefs = useRef<Array<HTMLDivElement | null>>([]);
   const pendingAnchorRef = useRef<number | null>(null);
   const settingsInitializedRef = useRef(false);
+  const lastAutoCollapsedDocumentRef = useRef<string | null>(null);
 
   const lines = useMemo(
     () => splitLines(documentData?.rawText ?? ""),
@@ -151,43 +241,81 @@ function App() {
     return map;
   }, [allMatches]);
 
-  const lineHeight = Math.round(BASE_LINE_HEIGHT * settings.fontScale);
-  const totalHeight = lines.length * lineHeight;
+  const visibleSections = useMemo(() => {
+    const hiddenTopLevelIds = new Set(
+      sections
+        .filter(
+          (section) =>
+            section.level === 1 &&
+            LOW_VALUE_SECTION_TITLES.has(normalizeSectionTitle(section.title)),
+        )
+        .map((section) => section.id),
+    );
 
-  const startLine = Math.max(
-    0,
-    Math.floor(scrollTop / lineHeight) - OVERSCAN_LINES,
+    return sections.filter((section) => {
+      if (section.level === 1) {
+        return !hiddenTopLevelIds.has(section.id);
+      }
+
+      if (section.parentId && hiddenTopLevelIds.has(section.parentId)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [sections]);
+
+  const sectionChildrenByParentId = useMemo(() => {
+    const map = new Map<string, number>();
+    visibleSections.forEach((section) => {
+      if (!section.parentId) {
+        return;
+      }
+
+      map.set(section.parentId, (map.get(section.parentId) ?? 0) + 1);
+    });
+    return map;
+  }, [visibleSections]);
+
+  const renderedSections = useMemo(
+    () =>
+      visibleSections.filter((section) => {
+        if (section.level === 1 || !section.parentId) {
+          return true;
+        }
+
+        return !collapsedSectionIds.has(section.parentId);
+      }),
+    [collapsedSectionIds, visibleSections],
   );
-  const endLine = Math.min(
-    lines.length,
-    Math.ceil((scrollTop + viewportHeight) / lineHeight) + OVERSCAN_LINES,
-  );
+
+  const documentFontSize = `${BASE_FONT_SIZE_REM * settings.fontScale}rem`;
 
   const activeMatch =
     allMatches[
       Math.min(activeMatchIndex, Math.max(allMatches.length - 1, 0))
     ] ?? null;
 
-  const viewportLines = viewportHeight > 0 ? viewportHeight / lineHeight : 0;
-  const longDocument = lines.length > Math.max(60, viewportLines * 1.5);
-  const minimapEnabled = settings.minimapVisible && longDocument;
-
   const scrollToLine = useCallback(
     (lineIndex: number, behavior: "start" | "center" = "center") => {
       const viewport = viewportRef.current;
-      if (!viewport) {
+      const lineNode = lineRefs.current[lineIndex];
+      if (!viewport || !lineNode) {
         return;
       }
 
-      let nextScrollTop = lineIndex * lineHeight;
+      let nextScrollTop = lineNode.offsetTop;
       if (behavior === "center") {
-        nextScrollTop -= viewport.clientHeight / 2;
+        nextScrollTop -= (viewport.clientHeight - lineNode.offsetHeight) / 2;
       }
 
-      const maxScroll = Math.max(totalHeight - viewport.clientHeight, 0);
+      const maxScroll = Math.max(
+        viewport.scrollHeight - viewport.clientHeight,
+        0,
+      );
       viewport.scrollTop = Math.max(0, Math.min(nextScrollTop, maxScroll));
     },
-    [lineHeight, totalHeight],
+    [],
   );
 
   const loadTopic = useCallback(async (query: string) => {
@@ -252,26 +380,43 @@ function App() {
   }, [searchMode, settings]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = settings.theme;
+    document.documentElement.classList.toggle(
+      "dark",
+      settings.theme === "dark",
+    );
   }, [settings.theme]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) {
-      return;
-    }
+    setCollapsedSectionIds((current) => {
+      const documentKey = documentData?.fetchedAt ?? null;
+      const nextParentIds = new Set(sectionChildrenByParentId.keys());
 
-    const resizeObserver = new ResizeObserver(() => {
-      setViewportHeight(viewport.clientHeight);
+      if (documentKey && lastAutoCollapsedDocumentRef.current !== documentKey) {
+        lastAutoCollapsedDocumentRef.current = documentKey;
+        return nextParentIds;
+      }
+
+      if (sectionChildrenByParentId.size === 0) {
+        return current.size === 0 ? current : new Set();
+      }
+
+      const next = new Set(
+        [...current].filter((sectionId) =>
+          sectionChildrenByParentId.has(sectionId),
+        ),
+      );
+
+      if (areSetsEqual(next, current)) {
+        return current;
+      }
+
+      return next;
     });
+  }, [documentData?.fetchedAt, sectionChildrenByParentId]);
 
-    resizeObserver.observe(viewport);
-    setViewportHeight(viewport.clientHeight);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
+  useEffect(() => {
+    lineRefs.current = lineRefs.current.slice(0, lines.length);
+  }, [lines.length]);
 
   useEffect(() => {
     const onResize = () => {
@@ -297,7 +442,6 @@ function App() {
       return;
     }
 
-    // Keep selected filter line anchored when filter view collapses back into full document mode.
     if (searchMode === "filter" && searchQuery.trim() !== "") {
       return;
     }
@@ -351,149 +495,17 @@ function App() {
     };
   }, []);
 
-  const headingLines = useMemo(
-    () => new Set(sections.map((section) => section.startLine)),
-    [sections],
-  );
-  const matchLines = useMemo(
-    () => new Set(filterLines.map((entry) => entry.lineIndex)),
-    [filterLines],
-  );
-
-  useEffect(() => {
-    if (!minimapEnabled) {
-      return;
-    }
-
-    const canvas = minimapRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    const pixelRatio = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-
-    canvas.width = Math.floor(width * pixelRatio);
-    canvas.height = Math.floor(height * pixelRatio);
-
-    context.resetTransform();
-    context.scale(pixelRatio, pixelRatio);
-    context.clearRect(0, 0, width, height);
-
-    context.fillStyle = settings.theme === "dark" ? "#0b121d" : "#e8edf4";
-    context.fillRect(0, 0, width, height);
-
-    if (lines.length === 0) {
-      return;
-    }
-
-    const step = Math.max(1, Math.floor(lines.length / Math.max(height, 1)));
-
-    for (let index = 0; index < lines.length; index += step) {
-      const y = (index / lines.length) * height;
-      const blockHeight = Math.max(1, (step / lines.length) * height);
-
-      if (headingLines.has(index)) {
-        context.fillStyle =
-          settings.theme === "dark"
-            ? "rgba(138, 184, 255, 0.85)"
-            : "rgba(42, 88, 160, 0.72)";
-      } else if (matchLines.has(index)) {
-        context.fillStyle =
-          settings.theme === "dark"
-            ? "rgba(255, 205, 80, 0.65)"
-            : "rgba(182, 126, 20, 0.65)";
+  const toggleSectionCollapse = (sectionId: string) => {
+    setCollapsedSectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
       } else {
-        const line = lines[index];
-        const density = Math.min(1, line.trim().length / 66);
-        const opacity = 0.08 + density * 0.2;
-        context.fillStyle =
-          settings.theme === "dark"
-            ? `rgba(170, 194, 220, ${opacity})`
-            : `rgba(74, 92, 118, ${opacity})`;
+        next.add(sectionId);
       }
-
-      context.fillRect(0, y, width, blockHeight);
-    }
-
-    const viewportTop = (scrollTop / Math.max(totalHeight, 1)) * height;
-    const viewportBlockHeight = Math.max(
-      20,
-      (viewportHeight / Math.max(totalHeight, 1)) * height,
-    );
-
-    context.fillStyle =
-      settings.theme === "dark"
-        ? "rgba(79, 130, 218, 0.2)"
-        : "rgba(45, 87, 170, 0.24)";
-    context.fillRect(1, viewportTop, width - 2, viewportBlockHeight);
-
-    context.strokeStyle =
-      settings.theme === "dark"
-        ? "rgba(119, 173, 255, 0.9)"
-        : "rgba(29, 69, 135, 0.9)";
-    context.lineWidth = 1.5;
-    context.strokeRect(1, viewportTop, width - 2, viewportBlockHeight);
-  }, [
-    headingLines,
-    lines,
-    matchLines,
-    minimapEnabled,
-    scrollTop,
-    settings.theme,
-    totalHeight,
-    viewportHeight,
-  ]);
-
-  const scrollFromMinimapPointer = useCallback(
-    (clientY: number) => {
-      const canvas = minimapRef.current;
-      const viewport = viewportRef.current;
-      if (!canvas || !viewport) {
-        return;
-      }
-
-      const bounds = canvas.getBoundingClientRect();
-      const relativeY = Math.max(
-        0,
-        Math.min(clientY - bounds.top, bounds.height),
-      );
-      const ratio = relativeY / Math.max(bounds.height, 1);
-
-      const nextScrollTop = ratio * totalHeight - viewport.clientHeight / 2;
-      const maxScroll = Math.max(totalHeight - viewport.clientHeight, 0);
-      viewport.scrollTop = Math.max(0, Math.min(nextScrollTop, maxScroll));
-    },
-    [totalHeight],
-  );
-
-  useEffect(() => {
-    const onMouseMove = (event: MouseEvent) => {
-      if (!minimapDraggingRef.current) {
-        return;
-      }
-
-      scrollFromMinimapPointer(event.clientY);
-    };
-
-    const onMouseUp = () => {
-      minimapDraggingRef.current = false;
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [scrollFromMinimapPointer]);
+      return next;
+    });
+  };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -520,16 +532,44 @@ function App() {
       return;
     }
 
-    setActiveMatchIndex((current) => {
-      const next =
-        (current + direction + allMatches.length) % allMatches.length;
-      return next;
-    });
+    setActiveMatchIndex(
+      (current) =>
+        (current + direction + allMatches.length) % allMatches.length,
+    );
+  };
+
+  const handleSearchInputKeyDown = (
+    event: ReactKeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    if (searchMode === "find") {
+      goToMatch(event.shiftKey ? -1 : 1);
+      return;
+    }
+
+    const focusedFilterLine = filterLines[activeFilterIndex] ?? filterLines[0];
+    if (focusedFilterLine) {
+      const selectedIndex = filterLines.findIndex(
+        (entry) => entry.lineIndex === focusedFilterLine.lineIndex,
+      );
+      selectFilterLine(
+        focusedFilterLine.lineIndex,
+        selectedIndex === -1 ? 0 : selectedIndex,
+      );
+    }
   };
 
   const clearSearch = () => {
     if (searchMode === "filter" && filterLines[activeFilterIndex]) {
       pendingAnchorRef.current = filterLines[activeFilterIndex].lineIndex;
+      setSearchMode("find");
+      setSettings((current) =>
+        mergeSettings(current, { lastSearchMode: "find" }),
+      );
     }
 
     setSearchQuery("");
@@ -537,368 +577,466 @@ function App() {
 
   const selectFilterLine = (lineIndex: number, filterIndex: number) => {
     setActiveFilterIndex(filterIndex);
+    const matchIndex = firstMatchIndexByLine.get(lineIndex);
+    if (matchIndex !== undefined) {
+      setActiveMatchIndex(matchIndex);
+    }
     pendingAnchorRef.current = lineIndex;
-    scrollToLine(lineIndex, "center");
+    setSearchMode("find");
+    setSettings((current) =>
+      mergeSettings(current, { lastSearchMode: "find" }),
+    );
   };
 
   const activeMatchLine = activeMatch?.lineIndex;
 
-  const visibleLines = [];
-  for (let index = startLine; index < endLine; index += 1) {
-    const sourceLine = lines[index] ?? "";
-    const tokens = tokenizeLine(sourceLine);
-    let tokenOffset = 0;
-    const tokenSpans = tokens.map((token) => {
-      const currentOffset = tokenOffset;
-      tokenOffset += token.text.length;
-      return { token, offset: currentOffset };
-    });
-    const lineClasses = ["doc-line"];
+  const visibleLines = Array.from(lines.entries()).map(
+    ([lineIndex, sourceLine]) => {
+      const {
+        content: lineContent,
+        lineStartColumns,
+        wrapStartColumns,
+      } = splitLineIndent(sourceLine);
+      const tokens = tokenizeLine(lineContent);
+      let tokenOffset = 0;
+      const tokenSpans = tokens.map((token) => {
+        const currentOffset = tokenOffset;
+        tokenOffset += token.text.length;
+        return { token, offset: currentOffset };
+      });
 
-    if (
-      activeMatchLine === index &&
-      searchMode === "find" &&
-      searchQuery.trim() !== ""
-    ) {
-      lineClasses.push("doc-line-active");
-    }
-
-    visibleLines.push(
-      <div
-        key={`line-${index}`}
-        className={lineClasses.join(" ")}
-        style={{
-          top: index * lineHeight,
-          height: lineHeight,
-          lineHeight: `${lineHeight}px`,
-        }}
-      >
-        <span className="line-number">{index + 1}</span>
-        <span className="line-text">
-          {tokenSpans.map(({ token, offset }) => (
-            <span
-              key={`line-${index}-token-${offset}-${token.kind}-${token.text.length}`}
-              className={`token token-${token.kind}`}
-            >
-              {highlightText(
-                token.text,
-                searchMode === "find" ? searchQuery : "",
-                `${index}-${offset}`,
-              )}
-            </span>
-          ))}
-        </span>
-      </div>,
-    );
-  }
+      return (
+        <div
+          key={`line-${lineIndex}`}
+          ref={(node) => {
+            lineRefs.current[lineIndex] = node;
+          }}
+          className={cn(
+            "px-3 py-0.5",
+            searchMode === "find" &&
+              searchQuery.trim() !== "" &&
+              activeMatchLine === lineIndex
+              ? "bg-accent/45"
+              : "hover:bg-accent/20",
+          )}
+        >
+          <span
+            className="block whitespace-pre-wrap break-words [tab-size:8]"
+            style={
+              wrapStartColumns > 0 || lineStartColumns !== wrapStartColumns
+                ? {
+                    paddingInlineStart: `${wrapStartColumns}ch`,
+                    textIndent: `${lineStartColumns - wrapStartColumns}ch`,
+                  }
+                : undefined
+            }
+          >
+            {tokenSpans.map(({ token, offset }) => (
+              <span
+                key={`line-${lineIndex}-token-${offset}-${token.kind}-${token.text.length}`}
+                className={
+                  TOKEN_KIND_CLASS[token.kind] ?? TOKEN_KIND_CLASS.plain
+                }
+              >
+                {highlightText(
+                  token.text,
+                  searchMode === "find" ? searchQuery : "",
+                  `${lineIndex}-${offset}`,
+                )}
+              </span>
+            ))}
+          </span>
+        </div>
+      );
+    },
+  );
 
   const renderedFilterLines = filterLines.slice(0, 1200);
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="title-group">
-          <h1>Better Man Viewer</h1>
-          <p>
-            {documentData?.title || "No page loaded"}
-            {isTauriRuntime() ? "" : " (browser fallback)"}
-          </p>
-        </div>
-
-        <form className="command-form" onSubmit={handleSubmit}>
-          <input
-            aria-label="Man topic"
-            value={topicInput}
-            onChange={(event) => setTopicInput(event.currentTarget.value)}
-            placeholder="Try: ls, printf, or 2 open"
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? "Loading..." : "Open"}
-          </button>
-        </form>
-
-        <div className="toolbar">
-          <fieldset className="segmented">
-            <legend className="sr-only">Search mode</legend>
-            <button
-              type="button"
-              className={searchMode === "find" ? "active" : ""}
-              onClick={() => changeSearchMode("find")}
-            >
-              Find
-            </button>
-            <button
-              type="button"
-              className={searchMode === "filter" ? "active" : ""}
-              onClick={() => changeSearchMode("filter")}
-            >
-              Filter
-            </button>
-          </fieldset>
-
-          <div className="search-controls">
-            <input
-              aria-label="Search"
-              value={searchQuery}
-              onChange={(event) => {
-                setActiveMatchIndex(0);
-                setActiveFilterIndex(0);
-                setSearchQuery(event.currentTarget.value);
-              }}
-              placeholder={
-                searchMode === "find"
-                  ? "Find text..."
-                  : "Filter matching lines..."
-              }
-            />
-            <button
-              type="button"
-              onClick={() => goToMatch(-1)}
-              disabled={allMatches.length === 0}
-            >
-              Prev
-            </button>
-            <button
-              type="button"
-              onClick={() => goToMatch(1)}
-              disabled={allMatches.length === 0}
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              onClick={clearSearch}
-              disabled={searchQuery.length === 0}
-            >
-              Clear
-            </button>
-            <span className="match-counter">
-              {allMatches.length === 0
-                ? "0"
-                : `${Math.min(activeMatchIndex + 1, allMatches.length)}/${allMatches.length}`}
-            </span>
-          </div>
-
-          <div className="zoom-controls">
-            <button
-              type="button"
-              onClick={() =>
-                setSettings((current) =>
-                  mergeSettings(current, {
-                    fontScale: clampFontScale(current.fontScale - 0.1),
-                  }),
-                )
-              }
-              aria-label="Zoom out"
-            >
-              A-
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setSettings((current) =>
-                  mergeSettings(current, { fontScale: 1 }),
-                )
-              }
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setSettings((current) =>
-                  mergeSettings(current, {
-                    fontScale: clampFontScale(current.fontScale + 0.1),
-                  }),
-                )
-              }
-              aria-label="Zoom in"
-            >
-              A+
-            </button>
-          </div>
-
-          <div className="misc-controls">
-            <button
-              type="button"
-              onClick={() =>
-                setSettings((current) =>
-                  mergeSettings(current, {
-                    theme: current.theme === "dark" ? "light" : "dark",
-                  }),
-                )
-              }
-            >
-              {settings.theme === "dark" ? "Light" : "Dark"}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setSettings((current) =>
-                  mergeSettings(current, {
-                    minimapVisible: !current.minimapVisible,
-                  }),
-                )
-              }
-            >
-              {settings.minimapVisible ? "Hide Minimap" : "Show Minimap"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void suggestAlias("zsh").then((snippet) =>
-                  setAliasSnippet(snippet),
-                );
-              }}
-            >
-              Alias
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {aliasSnippet ? (
-        <section className="alias-panel">
-          <div>
-            <strong>Optional shell override</strong>
-            <p>Use this after validation if you want `man` to open this app.</p>
-          </div>
-          <pre>{aliasSnippet}</pre>
-          <button type="button" onClick={() => setAliasSnippet(null)}>
-            Close
-          </button>
-        </section>
-      ) : null}
-
-      {errorMessage ? (
-        <section className="error-banner">{errorMessage}</section>
-      ) : null}
-
-      <section className="workspace">
-        <aside className="left-pane">
-          <div className="panel-section">
-            <h2>Sections</h2>
-            {sections.length === 0 ? (
-              <p className="muted">No sections detected.</p>
-            ) : null}
-            <ul>
-              {sections.map((section) => (
-                <li key={section.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      scrollToLine(section.startLine, "start");
-                    }}
-                  >
-                    {section.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="panel-section">
-            <h2>Matches</h2>
-            {searchQuery.trim() === "" ? (
-              <p className="muted">Type in search to build quick jumps.</p>
-            ) : null}
-            {searchQuery.trim() !== "" && filterLines.length === 0 ? (
-              <p className="muted">No matching lines.</p>
-            ) : null}
-
-            <ul>
-              {filterLines.slice(0, 300).map((entry) => (
-                <li key={`jump-${entry.lineIndex}`}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (searchMode === "find") {
-                        const matchIndex =
-                          firstMatchIndexByLine.get(entry.lineIndex) ?? 0;
-                        setActiveMatchIndex(matchIndex);
-                      }
-                      scrollToLine(entry.lineIndex, "center");
-                    }}
-                  >
-                    <span className="line-pill">L{entry.lineIndex + 1}</span>
-                    <span className="line-snippet">
-                      {entry.text.trim() || "(blank line)"}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
-
-        <div className="center-pane">
-          {searchMode === "filter" && searchQuery.trim() !== "" ? (
-            <div
-              className="filter-pane"
-              role="listbox"
-              aria-label="Filtered lines"
-            >
-              {renderedFilterLines.length === 0 ? (
-                <p className="muted">No lines match this filter.</p>
-              ) : (
-                renderedFilterLines.map((entry, index) => {
-                  const selected = index === activeFilterIndex;
-                  return (
-                    <button
-                      type="button"
-                      key={`filter-${entry.lineIndex}`}
-                      className={
-                        selected ? "filter-line selected" : "filter-line"
-                      }
-                      onClick={() => selectFilterLine(entry.lineIndex, index)}
-                    >
-                      <span className="line-pill">L{entry.lineIndex + 1}</span>
-                      <span className="line-snippet">
-                        {highlightText(
-                          entry.text || "(blank line)",
-                          searchQuery,
-                          `filter-${index}`,
-                        )}
-                      </span>
-                      <span className="line-pill">{entry.matchCount}x</span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          ) : (
-            <div
-              ref={viewportRef}
-              className={
-                minimapEnabled ? "doc-scroll hide-scrollbar" : "doc-scroll"
-              }
-              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-            >
-              <div className="doc-inner" style={{ height: `${totalHeight}px` }}>
-                {visibleLines}
+    <main className="h-screen w-screen bg-background text-foreground">
+      <div className="flex h-full min-h-0 flex-col gap-3 p-3">
+        <Card className="border-border/70 bg-card/95 shadow-sm">
+          <CardContent className="space-y-3 p-3">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <h1 className="text-base font-semibold tracking-tight">
+                  Better Man Viewer
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  {documentData?.title || "No page loaded"}
+                  {isTauriRuntime() ? "" : " (browser fallback)"}
+                </p>
               </div>
-            </div>
-          )}
-        </div>
 
-        <aside className="right-pane">
-          {minimapEnabled ? (
-            <canvas
-              ref={minimapRef}
-              className="minimap"
-              onMouseDown={(event) => {
-                minimapDraggingRef.current = true;
-                scrollFromMinimapPointer(event.clientY);
-              }}
-            />
-          ) : (
-            <div className="minimap-disabled">
-              <strong>Scroll Mode</strong>
-              <p>{longDocument ? "Minimap hidden" : "Native scrollbar"}</p>
+              <form
+                className="flex w-full max-w-xl items-center gap-2"
+                onSubmit={handleSubmit}
+              >
+                <Input
+                  aria-label="Man topic"
+                  value={topicInput}
+                  onChange={(event) => setTopicInput(event.currentTarget.value)}
+                  placeholder="Try: fzf, ls, printf, or 2 open"
+                  className="font-mono"
+                />
+                <Button type="submit" size="sm" disabled={loading}>
+                  {loading ? "Loading..." : "Open"}
+                </Button>
+              </form>
             </div>
-          )}
-        </aside>
-      </section>
+
+            <Separator />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/40 p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={searchMode === "find" ? "default" : "ghost"}
+                  onClick={() => changeSearchMode("find")}
+                  className="h-7"
+                >
+                  Find
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={searchMode === "filter" ? "default" : "ghost"}
+                  onClick={() => changeSearchMode("filter")}
+                  className="h-7"
+                >
+                  Filter
+                </Button>
+              </div>
+
+              <Input
+                aria-label="Search"
+                value={searchQuery}
+                onKeyDown={handleSearchInputKeyDown}
+                onChange={(event) => {
+                  setActiveMatchIndex(0);
+                  setActiveFilterIndex(0);
+                  setSearchQuery(event.currentTarget.value);
+                }}
+                placeholder={
+                  searchMode === "find"
+                    ? "Find text (Enter for next, Shift+Enter for previous)"
+                    : "Filter matching lines"
+                }
+                className="min-w-[280px] flex-1 font-mono"
+              />
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => goToMatch(-1)}
+                disabled={allMatches.length === 0}
+              >
+                Prev
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => goToMatch(1)}
+                disabled={allMatches.length === 0}
+              >
+                Next
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={clearSearch}
+                disabled={searchQuery.length === 0}
+              >
+                Clear
+              </Button>
+
+              <span className="w-16 text-center text-xs tabular-nums text-muted-foreground">
+                {allMatches.length === 0
+                  ? "0"
+                  : `${Math.min(activeMatchIndex + 1, allMatches.length)}/${allMatches.length}`}
+              </span>
+
+              <Separator
+                orientation="vertical"
+                className="mx-1 hidden h-6 md:block"
+              />
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setSettings((current) =>
+                    mergeSettings(current, {
+                      fontScale: clampFontScale(current.fontScale - 0.1),
+                    }),
+                  )
+                }
+                aria-label="Zoom out"
+              >
+                A-
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setSettings((current) =>
+                    mergeSettings(current, { fontScale: 1 }),
+                  )
+                }
+              >
+                Reset
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setSettings((current) =>
+                    mergeSettings(current, {
+                      fontScale: clampFontScale(current.fontScale + 0.1),
+                    }),
+                  )
+                }
+                aria-label="Zoom in"
+              >
+                A+
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setSettings((current) =>
+                    mergeSettings(current, {
+                      theme: current.theme === "dark" ? "light" : "dark",
+                    }),
+                  )
+                }
+                className="gap-2"
+              >
+                {settings.theme === "dark" ? (
+                  <Sun className="size-4" />
+                ) : (
+                  <Moon className="size-4" />
+                )}
+                {settings.theme === "dark" ? "Light" : "Dark"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  void suggestAlias("zsh").then((snippet) =>
+                    setAliasSnippet(snippet),
+                  );
+                }}
+              >
+                Alias
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {aliasSnippet ? (
+          <Card className="border-border/70 bg-card/95 shadow-sm">
+            <CardContent className="flex flex-col gap-2 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">Optional shell override</p>
+                  <p className="text-xs text-muted-foreground">
+                    Use this after validation if you want `man` to open this
+                    app.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAliasSnippet(null)}
+                >
+                  Close
+                </Button>
+              </div>
+              <pre className="overflow-x-auto rounded-md border border-border/70 bg-muted/40 p-2 text-xs">
+                {aliasSnippet}
+              </pre>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {errorMessage ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(280px,32vw)_minmax(0,1fr)] xl:grid-cols-[minmax(320px,30vw)_minmax(0,1fr)]">
+          <Card className="min-h-0 border-border/70 bg-card/95 shadow-sm">
+            <CardContent className="flex h-full min-h-0 flex-col p-0">
+              <div className="border-b border-border/70 px-3 py-2">
+                <h2 className="text-xs font-semibold tracking-[0.18em] text-muted-foreground">
+                  Sections
+                </h2>
+              </div>
+
+              {visibleSections.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">
+                  No sections detected.
+                </p>
+              ) : (
+                <ScrollArea className="h-full px-2 py-2">
+                  <ul className="space-y-1" aria-label="Sections">
+                    {renderedSections.map((section) => {
+                      const hasChildren =
+                        (sectionChildrenByParentId.get(section.id) ?? 0) > 0;
+                      const collapsed = collapsedSectionIds.has(section.id);
+
+                      return (
+                        <li key={section.id}>
+                          <div
+                            className={cn(
+                              "grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-1 rounded-md",
+                              section.level === 2 &&
+                                "ml-3 border-l border-border/55 pl-3",
+                            )}
+                          >
+                            {hasChildren ? (
+                              <Button
+                                type="button"
+                                size="icon-xs"
+                                variant="ghost"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleSectionCollapse(section.id);
+                                }}
+                                aria-label={
+                                  collapsed
+                                    ? `Expand ${section.title}`
+                                    : `Collapse ${section.title}`
+                                }
+                                className="size-5 text-muted-foreground"
+                              >
+                                {collapsed ? (
+                                  <ChevronRight className="size-3" />
+                                ) : (
+                                  <ChevronDown className="size-3" />
+                                )}
+                              </Button>
+                            ) : (
+                              <span className="block size-5" />
+                            )}
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                scrollToLine(section.startLine, "start")
+                              }
+                              className={cn(
+                                "h-8 justify-start px-2",
+                                section.level === 1
+                                  ? "text-sm font-semibold"
+                                  : "text-sm text-muted-foreground",
+                              )}
+                            >
+                              {section.title}
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="min-h-0 border-border/70 bg-card/95 shadow-sm">
+            <CardContent className="h-full min-h-0 p-0">
+              {searchMode === "filter" && searchQuery.trim() !== "" ? (
+                <ScrollArea className="h-full px-2 py-2">
+                  <div
+                    role="listbox"
+                    aria-label="Filtered lines"
+                    className="grid gap-1"
+                    style={{
+                      fontSize: documentFontSize,
+                      fontFamily: DOCUMENT_FONT_FAMILY,
+                    }}
+                  >
+                    {renderedFilterLines.length === 0 ? (
+                      <p className="px-2 py-1 text-sm text-muted-foreground">
+                        No lines match this filter.
+                      </p>
+                    ) : (
+                      renderedFilterLines.map((entry, index) => {
+                        const selected = index === activeFilterIndex;
+                        const {
+                          content: lineContent,
+                          lineStartColumns,
+                          wrapStartColumns,
+                        } = splitLineIndent(entry.text || "");
+                        return (
+                          <button
+                            type="button"
+                            key={`filter-${entry.lineIndex}`}
+                            className={cn(
+                              "w-full rounded-md border border-border/60 px-2 py-1 text-left hover:bg-accent/40",
+                              selected && "border-primary/45 bg-accent/55",
+                            )}
+                            onClick={() =>
+                              selectFilterLine(entry.lineIndex, index)
+                            }
+                          >
+                            <span
+                              className="block whitespace-pre-wrap break-words [tab-size:8]"
+                              style={
+                                wrapStartColumns > 0 ||
+                                lineStartColumns !== wrapStartColumns
+                                  ? {
+                                      paddingInlineStart: `${wrapStartColumns}ch`,
+                                      textIndent: `${lineStartColumns - wrapStartColumns}ch`,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {highlightText(
+                                lineContent || "(blank line)",
+                                searchQuery,
+                                `filter-${index}`,
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div
+                  ref={viewportRef}
+                  className="h-full overflow-y-auto overflow-x-hidden"
+                  style={{
+                    fontSize: documentFontSize,
+                    fontFamily: DOCUMENT_FONT_FAMILY,
+                  }}
+                >
+                  <div className="pb-2">{visibleLines}</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </main>
   );
 }
