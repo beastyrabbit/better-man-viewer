@@ -3,8 +3,8 @@ import { createMockManpage } from "./mockManpage";
 import {
   DEFAULT_SETTINGS,
   MAX_FONT_SCALE,
-  MIN_FONT_SCALE,
   type ManDocumentPayload,
+  MIN_FONT_SCALE,
   type ViewerSettings,
   type ViewerSettingsPatch,
 } from "./types";
@@ -18,7 +18,9 @@ declare global {
 }
 
 export function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && window.__TAURI_INTERNALS__ !== undefined;
+  return (
+    typeof window !== "undefined" && window.__TAURI_INTERNALS__ !== undefined
+  );
 }
 
 function sanitizeSettings(input: Partial<ViewerSettings>): ViewerSettings {
@@ -33,13 +35,19 @@ function sanitizeSettings(input: Partial<ViewerSettings>): ViewerSettings {
 
   return {
     ...merged,
-    fontScale: Math.min(MAX_FONT_SCALE, Math.max(MIN_FONT_SCALE, merged.fontScale)),
+    fontScale: Math.min(
+      MAX_FONT_SCALE,
+      Math.max(MIN_FONT_SCALE, merged.fontScale),
+    ),
     lastSearchMode: merged.lastSearchMode === "filter" ? "filter" : "find",
     theme: merged.theme === "light" ? "light" : "dark",
   };
 }
 
-function mergeSettings(base: ViewerSettings, patch: ViewerSettingsPatch): ViewerSettings {
+function mergeSettings(
+  base: ViewerSettings,
+  patch: ViewerSettingsPatch,
+): ViewerSettings {
   return sanitizeSettings({
     ...base,
     ...patch,
@@ -82,7 +90,9 @@ export async function getSettings(): Promise<ViewerSettings> {
   return sanitizeSettings(settings);
 }
 
-export async function setSettings(patch: ViewerSettingsPatch): Promise<ViewerSettings> {
+export async function setSettings(
+  patch: ViewerSettingsPatch,
+): Promise<ViewerSettings> {
   if (!isTauriRuntime()) {
     const current = getBrowserSettings();
     return setBrowserSettings(mergeSettings(current, patch));
@@ -105,7 +115,9 @@ export async function loadManPage(input: string): Promise<ManDocumentPayload> {
   return invoke<ManDocumentPayload>("load_man_page", { input: trimmed });
 }
 
-export async function suggestAlias(shell: "zsh" | "bash" | "fish"): Promise<string> {
+export async function suggestAlias(
+  shell: "zsh" | "bash" | "fish",
+): Promise<string> {
   if (!isTauriRuntime()) {
     return shell === "fish"
       ? "function man\n  better-man-viewer $argv\nend"

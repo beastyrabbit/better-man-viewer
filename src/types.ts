@@ -38,6 +38,8 @@ export interface SectionAnchor {
   title: string;
   startLine: number;
   endLine: number;
+  level: 1 | 2;
+  parentId?: string;
 }
 
 export interface FindMatch {

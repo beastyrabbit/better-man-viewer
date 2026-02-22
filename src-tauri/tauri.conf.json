@@ -14,7 +14,8 @@
       {
         "title": "Better Man Viewer",
         "width": 1280,
-        "height": 820
+        "height": 820,
+        "decorations": true
       }
     ],
     "security": {
