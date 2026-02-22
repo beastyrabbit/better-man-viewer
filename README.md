@@ -1,52 +1,69 @@
 # Better Man Viewer
 
-Desktop-first manpage viewer built with Tauri + React + TypeScript.
+A desktop-first man page reader for Linux, built with **Tauri + React + TypeScript**.
+It keeps the speed of `man` while making long docs easier to navigate with sections, search modes, and cleaner reading ergonomics.
 
-## Features
+![Better Man Viewer screenshot](./playwright-desktop-fzf.png)
 
-- System manpage loading (`man` + `col -bx`) via Rust Tauri commands.
-- Structured left navigation based on section heading detection.
-- Two search modes:
-  - `Find`: highlight all matches and jump with next/prev.
-  - `Filter`: show only matching lines, pick a line, then clear filter and stay anchored there.
-- Zoom controls (`Ctrl/Cmd +`, `Ctrl/Cmd -`, `Ctrl/Cmd 0`).
-- Right-side minimap visual scrollbar for long pages.
-- Native scrollbar fallback for short pages.
-- Persisted settings (theme, zoom, minimap, last mode, window size).
-- Optional alias helper for replacing `man` after validation.
+## Highlights
 
-## Development
+- Loads real system man pages through the Rust backend (`man` + `col -bx`).
+- Section tree with collapsible hierarchy for pages like `fzf(1)` (`OPTIONS -> SEARCH`, etc.).
+- Two search workflows:
+  - `Find`: inline highlighting with Enter / Shift+Enter navigation.
+  - `Filter`: narrow to matching lines, click to jump, return to full context.
+- Adjustable zoom (`Ctrl/Cmd +`, `Ctrl/Cmd -`, `Ctrl/Cmd 0`).
+- Wrapped line rendering tuned for terminal-like indentation and option descriptions.
+- Persistent settings (theme, zoom, last search mode, window size).
+
+## Quick Start
+
+### Prerequisites
+
+- Node + pnpm
+- Rust toolchain (for Tauri desktop runtime)
+- Linux environment with `man` and `col`
+
+### Install
 
 ```bash
 pnpm install
+```
+
+### Run (Web Preview)
+
+```bash
 pnpm dev
 ```
 
-Run as desktop app:
+Open `http://localhost:1420`.
+
+### Run (Desktop App)
 
 ```bash
 pnpm tauri dev
 ```
 
-## Quality Checks
+## Developer Commands
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
+pnpm lint       # Biome checks for src/
+pnpm typecheck  # TypeScript validation
+pnpm test       # Vitest unit tests
+pnpm build      # Production web build
 ```
 
-## Hook Setup
+## Hooks & Safety
 
-This repo uses `lefthook` with required `gitleaks` + lint checks.
+This repo uses `lefthook` with `gitleaks` and lint checks.
 
 ```bash
 lefthook install
 ```
 
-## Alias Override (Opt-in)
+## Optional Shell Alias
 
-Use the Alias button in the app or apply manually in shell config:
+If you want to launch this app from `man`, add:
 
 ```bash
 man() {
@@ -54,9 +71,8 @@ man() {
 }
 ```
 
-Bypass wrapper anytime with:
+Bypass anytime with:
 
 ```bash
 command man ls
 ```
-
