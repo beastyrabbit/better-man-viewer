@@ -50,6 +50,14 @@ Open `http://localhost:1420`.
 pnpm tauri dev
 ```
 
+### Build + Install Binary (Local User)
+
+```bash
+pnpm install-app
+```
+
+This builds a release binary and installs it to `~/.local/bin/better-man-viewer`.
+
 ## Developer Commands
 
 ```bash

@@ -9,6 +9,7 @@
     "lint": "biome check src",
     "test": "vitest run",
     "build": "pnpm typecheck && vite build",
+    "install-app": "bash ./scripts/install-app.sh",
     "preview": "vite preview",
     "tauri": "tauri",
     "prepare": "lefthook install"
