@@ -16,8 +16,15 @@
 - `pnpm test`: run unit tests once via Vitest.
 - `pnpm lint`: run Biome lint/format checks on `src`.
 - `pnpm typecheck`: run TypeScript checks with `tsc --noEmit`.
+- `pnpm verify`: run lint + typecheck + tests as a single quality gate.
 - `pnpm build`: run typecheck, then build the production web bundle.
+- `pnpm install-app`: run `verify`, build a no-bundle Tauri release binary, and install it locally.
 - `lefthook install`: enable pre-commit hooks (`gitleaks` and lint).
+
+## Reusable Learnings
+- `scripts/install-app.sh` supports `INSTALL_DIR`, `INSTALL_NAME`, `CARGO_TARGET_DIR`, and `CARGO_BUILD_TARGET` for local install customization.
+- The installer intentionally blocks root installs unless `ALLOW_SYSTEM_INSTALL=1` is set.
+- `prepare` uses `git rev-parse --is-inside-work-tree` so hook installation works in both normal clones and git worktrees.
 
 ## Coding Style & Naming Conventions
 - Use TypeScript for frontend code and Rust for Tauri backend code.
