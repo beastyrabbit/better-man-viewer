@@ -3,7 +3,13 @@
 A desktop-first man page reader for Linux, built with **Tauri + React + TypeScript**.
 It keeps the speed of `man` while making long docs easier to navigate with sections, search modes, and cleaner reading ergonomics.
 
-![Better Man Viewer screenshot](./playwright-desktop-fzf.png)
+## Demo (Real `fzf` Session)
+
+![Better Man Viewer demo](./docs/media/demo-01.gif)
+
+[MP4 demo (higher quality)](./docs/media/demo-01.mp4)
+
+![Better Man Viewer overview](./docs/media/demo-01-overview.png)
 
 ## Highlights
 
