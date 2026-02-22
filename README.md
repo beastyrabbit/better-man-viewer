@@ -26,7 +26,8 @@ It keeps the speed of `man` while making long docs easier to navigate with secti
 
 ### Prerequisites
 
-- Node + pnpm
+- Node.js `^20.19.0` or `>=22.12.0`
+- pnpm
 - Rust toolchain (for Tauri desktop runtime)
 - Linux environment with `man` and `col`
 
@@ -56,7 +57,13 @@ pnpm tauri dev
 pnpm install-app
 ```
 
-This builds a release binary and installs it to `~/.local/bin/better-man-viewer`.
+This runs lint/typecheck/tests, builds a release binary, and installs it to
+`~/.local/bin/better-man-viewer`.
+
+Optional overrides:
+- `INSTALL_DIR=/custom/bin pnpm install-app`
+- `INSTALL_NAME=my-man-viewer pnpm install-app`
+- `CARGO_TARGET_DIR=/tmp/tauri-target pnpm install-app`
 
 ## Developer Commands
 
@@ -64,6 +71,7 @@ This builds a release binary and installs it to `~/.local/bin/better-man-viewer`
 pnpm lint       # Biome checks for src/
 pnpm typecheck  # TypeScript validation
 pnpm test       # Vitest unit tests
+pnpm verify     # lint + typecheck + tests
 pnpm build      # Production web build
 ```
 
@@ -81,7 +89,7 @@ If you want to launch this app from `man`, add:
 
 ```bash
 man() {
-  better-man-viewer "$@"
+  command better-man-viewer "$@" || command man "$@"
 }
 ```
 
