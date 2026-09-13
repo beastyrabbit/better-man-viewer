@@ -1,5 +1,12 @@
 # Better Man Viewer
 
+
+## At a glance
+
+A Tauri desktop reader that makes long Linux man pages easier to search and navigate.
+
+![Better Man Viewer](docs/media/demo-01-overview.png)
+
 A desktop-first man page reader for Linux, built with **Tauri + React + TypeScript**.
 It keeps the speed of `man` while making long docs easier to navigate with sections, search modes, and cleaner reading ergonomics.
 
